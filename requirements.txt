@@ -1,0 +1,8 @@
+duckdb
+jupyter
+matplotlib
+nbformat
+numpy
+pandas
+requests
+seaborn

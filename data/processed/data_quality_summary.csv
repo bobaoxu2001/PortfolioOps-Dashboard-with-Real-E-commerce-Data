@@ -1,0 +1,8 @@
+check_name,issue_rows
+duplicate_geolocation_zip_prefix_raw,981148
+orders_missing_delivered_customer_date_for_delivered_status,8
+duplicate_order_ids_raw,0
+duplicate_order_item_keys_raw,0
+orders_missing_customer_id,0
+orders_missing_purchase_timestamp,0
+orders_with_estimated_delivery_before_purchase,0

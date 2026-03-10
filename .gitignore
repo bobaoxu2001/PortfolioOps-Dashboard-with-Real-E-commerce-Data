@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Local env
+.venv/
+
+# Large raw source files (reproducible via downloader script)
+data/raw/*.csv
+!data/raw/.gitkeep
+
+# DuckDB working files
+data/processed/*.duckdb
+data/processed/*.duckdb.wal
+

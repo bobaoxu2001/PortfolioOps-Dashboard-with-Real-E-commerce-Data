@@ -1,0 +1,6 @@
+delay_bucket,orders,avg_review_score
+On time or early,89941,4.292505310003034
+1-3 days late,1870,3.292232482346551
+4-7 days late,1802,2.1089080459770115
+8+ days late,2863,1.695408532176428
+Not Delivered,2965,1.741163870046412

@@ -1,0 +1,15 @@
+table_name,row_count
+marts.dim_customers,99441
+marts.dim_dates,774
+marts.dim_products,32951
+marts.dim_sellers,3095
+marts.fact_order_items,112650
+marts.fact_orders,99441
+raw.customers,99441
+raw.geolocation,1000163
+raw.order_items,112650
+raw.order_payments,103886
+raw.order_reviews,99224
+raw.orders,99441
+raw.products,32951
+raw.sellers,3095
