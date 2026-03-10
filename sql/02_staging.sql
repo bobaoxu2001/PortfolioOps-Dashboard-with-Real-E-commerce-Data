@@ -20,7 +20,10 @@ FROM (
         *,
         ROW_NUMBER() OVER (
             PARTITION BY order_id
-            ORDER BY order_purchase_ts DESC NULLS LAST
+            ORDER BY
+                order_purchase_ts DESC NULLS LAST,
+                customer_id,
+                order_status
         ) AS rn
     FROM typed
 )
@@ -44,7 +47,12 @@ FROM (
         *,
         ROW_NUMBER() OVER (
             PARTITION BY order_id, order_item_id
-            ORDER BY shipping_limit_ts DESC NULLS LAST
+            ORDER BY
+                shipping_limit_ts DESC NULLS LAST,
+                seller_id,
+                product_id,
+                price DESC NULLS LAST,
+                freight_value DESC NULLS LAST
         ) AS rn
     FROM typed
 )
@@ -66,7 +74,10 @@ FROM (
         *,
         ROW_NUMBER() OVER (
             PARTITION BY order_id, payment_sequential
-            ORDER BY payment_value DESC NULLS LAST
+            ORDER BY
+                payment_value DESC NULLS LAST,
+                payment_type,
+                payment_installments DESC NULLS LAST
         ) AS rn
     FROM typed
 )
@@ -90,7 +101,10 @@ FROM (
         *,
         ROW_NUMBER() OVER (
             PARTITION BY review_id
-            ORDER BY review_answer_ts DESC NULLS LAST
+            ORDER BY
+                review_answer_ts DESC NULLS LAST,
+                order_id,
+                review_score DESC NULLS LAST
         ) AS rn
     FROM typed
 )
@@ -112,7 +126,11 @@ FROM (
         *,
         ROW_NUMBER() OVER (
             PARTITION BY customer_id
-            ORDER BY customer_unique_id
+            ORDER BY
+                customer_unique_id,
+                customer_zip_code_prefix,
+                customer_state,
+                customer_city
         ) AS rn
     FROM typed
 )
@@ -152,7 +170,10 @@ FROM (
         *,
         ROW_NUMBER() OVER (
             PARTITION BY seller_id
-            ORDER BY seller_zip_code_prefix
+            ORDER BY
+                seller_zip_code_prefix,
+                seller_state,
+                seller_city
         ) AS rn
     FROM typed
 )

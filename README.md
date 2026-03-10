@@ -1,92 +1,114 @@
-# Olist Executive Reporting Layer  
-### Consulting-Style Analytics Project for Data Analyst / BI Roles
+# Olist Executive Reporting Layer
+### Consulting-style BI and KPI Governance Case (Allen Xu)
 
-**Author:** Allen Xu  
-**Project Type:** End-to-end analytics consulting engagement (data audit -> reporting layer -> executive dashboards -> recommendations)
+Portfolio project for data consulting / BI interviews, designed to mimic a client engagement:
 
----
+> Before: fragmented, manual, high-risk reporting  
+> After: trusted reporting layer + KPI governance + executive dashboard package
 
-## Project Objective
-
-This project simulates a client engagement for a PE-backed / growth-stage commerce business:
-
-> "Leadership has data in many places, but reporting is slow, inconsistent, and hard to trust. Build a centralized analytics layer and dashboard that gives decision-makers visibility into sales, fulfillment, customer experience, and operational performance."
-
-The deliverable is designed to demonstrate the exact skill mix expected in a consulting analytics or data analyst role:
-- ad hoc analysis
-- KPI design
-- data quality validation
-- dimensional modeling
-- dashboard storytelling
-- business-facing recommendations
+![Dashboard collage](dashboard/screenshots/dashboard_collage.png)
 
 ---
 
-## Why This Fits a Data Consulting Role
+## Why this project is relevant to consulting analytics work
 
-This repository shows how to:
-1. Assess messy source data and identify KPI-risk issues.
-2. Consolidate multiple transactional tables into a trusted reporting model.
-3. Build executive-ready KPI views and visual summaries.
-4. Translate metrics into management actions (not just charts).
+This repository demonstrates the exact workstream a consulting analytics team delivers:
 
----
-
-## Dataset Overview (Real Public Data)
-
-Primary source: **Olist Brazilian E-Commerce Public Dataset** (official public mirror).  
-Tables used:
-- orders
-- order items
-- customers
-- products
-- sellers
-- payments
-- reviews
-- geolocation
-- category translation
-
-Raw files are downloaded via:
-
-```bash
-python3 python/download_olist_data.py
-```
+1. **Assess data environment risk** (nulls, duplicates, join grain mismatch, timestamp quality)
+2. **Centralize into a trusted reporting layer** (fact/dim model with business-ready metrics)
+3. **Implement KPI governance** (data contracts and publication gating)
+4. **Deliver executive BI outputs** (dashboard pages + memo + implementation docs)
+5. **Translate data into decisions** (operational and commercial recommendations)
 
 ---
 
-## Final Repository Structure
+## Business objective
+
+Build a centralized analytics layer for leadership visibility into:
+- sales and order trends
+- fulfillment reliability
+- customer experience impact
+- commercial concentration and risk
+
+Primary dataset is the **real public Olist e-commerce dataset** (no synthetic transaction generation).
+
+---
+
+## KPI Governance and Metric Trust
+
+### Primary commercial KPI convention
+
+- **Primary Revenue KPI:** `gmv_revenue_eligible`
+- **Definition:** sum of GMV only where `is_revenue_eligible_order = 1`
+- **Reason:** canceled/unavailable orders are operational outcomes, not realized commercial value
+
+### Transparency companion
+
+- `gmv_all_orders` is also exported for QA transparency and variance analysis, but is **not** the executive commercial headline KPI.
+
+### Primary AOV definition
+
+- `aov_revenue_eligible = gmv_revenue_eligible / revenue_eligible_orders`
+
+### Governance controls
+
+- 17 automated data contract tests
+- Critical failures block KPI publication
+- Test outputs:
+  - `data/processed/data_contract_test_results.csv`
+  - `data/processed/data_contract_test_summary.csv`
+  - `docs/data_contract_test_report.md`
+
+---
+
+## Current executive KPI snapshot (from `kpi_headline.csv`)
+
+- **Total orders (all statuses):** 99,441
+- **Revenue-eligible orders:** 98,199
+- **Primary GMV (`gmv_revenue_eligible`):** **R$15.74M**
+- **GMV all-orders reference:** R$15.85M
+- **Primary AOV:** **R$160.29**
+- **Cancellation rate:** 1.24%
+- **Average review score:** 4.09 / 5
+- **On-time delivery rate:** 91.9%
+- **Top-10 seller concentration share:** 12.85% of primary GMV
+
+---
+
+## Decision-oriented top insights
+
+1. **Protect customer experience via delivery SLA interventions:**  
+   review scores drop sharply as delays increase (on-time vs late gap is material).
+2. **Prioritize regional fulfillment fixes where delivery times are structurally slower:**  
+   directly impacts satisfaction and likely repeat behavior.
+3. **Manage seller dependency risk proactively:**  
+   top sellers account for a meaningful share of monetized GMV.
+4. **Treat cancellation rate as a weekly control metric, not only a monthly post-mortem KPI.**
+5. **Use revenue-eligible KPI definitions in leadership reporting to avoid overstatement bias.**
+
+---
+
+## Architecture and workflow
+
+![Architecture Diagram](docs/architecture_diagram.png)
+
+Pipeline:
+1. Download raw Olist CSVs
+2. Run staging transforms (typing, dedupe, key normalization)
+3. Build marts (`fact_orders`, `fact_order_items`, dimensions)
+4. Export KPI tables
+5. Run data contract tests
+6. Generate dashboard assets (PNG + PDF)
+
+---
+
+## Repository structure (key assets)
 
 ```text
 /
-├── .github/
-│   └── workflows/
-│       └── pipeline_smoke_test.yml
+├── .github/workflows/pipeline_smoke_test.yml
 ├── Makefile
-├── README.md
 ├── requirements.txt
-├── data/
-│   ├── raw/
-│   │   ├── .gitkeep
-│   │   └── README.md
-│   └── processed/
-│       ├── .gitkeep
-│       ├── README.md
-│       ├── kpi_headline.csv
-│       ├── kpi_monthly.csv
-│       ├── kpi_weekly_ops.csv
-│       ├── kpi_active_customers_monthly.csv
-│       ├── kpi_customer_cohort_retention.csv
-│       ├── kpi_category_performance.csv
-│       ├── kpi_seller_performance.csv
-│       ├── kpi_seller_operational_risk.csv
-│       ├── kpi_state_performance.csv
-│       ├── kpi_payment_mix.csv
-│       ├── kpi_delay_vs_reviews.csv
-│       ├── data_quality_summary.csv
-│       ├── data_contract_test_results.csv
-│       ├── data_contract_test_summary.csv
-│       ├── kpi_join_risk_demo.csv
-│       └── model_row_counts.csv
 ├── sql/
 │   ├── 01_schema.sql
 │   ├── 02_staging.sql
@@ -97,13 +119,22 @@ python3 python/download_olist_data.py
 │   ├── build_reporting_layer.py
 │   ├── run_data_contract_tests.py
 │   ├── run_pipeline.py
-│   ├── generate_dashboard_assets.py
-│   ├── data_quality_audit.ipynb
-│   └── optional_etl_or_validation.ipynb
+│   └── generate_dashboard_assets.py
+├── data/processed/
+│   ├── kpi_headline.csv
+│   ├── kpi_monthly.csv
+│   ├── kpi_weekly_ops.csv
+│   ├── kpi_seller_concentration.csv
+│   ├── data_contract_test_results.csv
+│   └── data_contract_test_summary.csv
 ├── dashboard/
 │   ├── dashboard_export.pdf
 │   ├── powerbi_layout_guide.md
+│   ├── powerbi/
+│   │   ├── README.md
+│   │   └── measure_definitions.md
 │   └── screenshots/
+│       ├── dashboard_collage.png
 │       ├── page_1_executive_overview.png
 │       ├── page_2_customer_fulfillment.png
 │       ├── page_3_commercial_performance.png
@@ -112,158 +143,38 @@ python3 python/download_olist_data.py
     ├── executive_summary.md
     ├── data_dictionary.md
     ├── metric_definitions.md
+    ├── metric_caveats.md
     ├── qa_framework.md
     ├── data_contract_test_report.md
-    └── architecture_diagram.png
+    └── freshness_sla_placeholder.md
 ```
 
 ---
 
-## Implementation Plan (Consulting Workplan)
+## Dashboard package
 
-1. **Assess data environment**  
-   Profile source tables, key health, timestamp integrity, and join risks.
-2. **Build trusted reporting layer**  
-   Create staging transformations and marts with explicit grain control.
-3. **Define KPI contracts**  
-   Document business-friendly metric definitions and caveats.
-4. **Develop executive dashboards**  
-   Build 4-page KPI story (overview, fulfillment, commercial, data quality).
-5. **Translate into actions**  
-   Deliver executive memo with recommendations and ongoing monitoring plan.
+- Page 1: Executive Overview
+- Page 2: Customer Experience & Fulfillment
+- Page 3: Commercial Performance
+- Page 4: Data Quality / KPI Reliability
 
----
-
-## Architecture / Workflow
-
-![Architecture Diagram](docs/architecture_diagram.png)
-
-### Workflow
-1. **Raw ingestion** from official Olist public dataset CSVs.
-2. **Staging transformations** for type casting, deduping, and key normalization.
-3. **Reporting marts**:
-   - `fact_orders`
-   - `fact_order_items`
-   - `dim_customers`
-   - `dim_products`
-   - `dim_sellers`
-   - `dim_dates`
-   - `dim_geography`
-4. **Business queries + KPI exports** for dashboards and memo.
-5. **Executive dashboard pages** and PDF export.
+Power BI rebuild documentation:
+- `dashboard/powerbi_layout_guide.md`
+- `dashboard/powerbi/README.md`
+- `dashboard/powerbi/measure_definitions.md`
 
 ---
 
-## Key Data Quality Findings (and Fixes)
-
-### Major risks identified
-- **Geolocation join explosion risk:** 981,148 duplicate zip-prefix rows in raw geolocation.
-- **Join-grain mismatch risk:** naive item+payment joins overstate GMV by **R$723K**.
-- **Delivery completeness gap:** 8 delivered orders missing delivered-customer timestamp.
-
-### Mitigations implemented
-- Consolidated geolocation to one row per zip prefix (`stg_geolocation_zip`).
-- Aggregated item/payment/review tables before joining into `fact_orders`.
-- Added explicit KPI flags:
-  - `is_canceled_or_unavailable`
-  - `is_revenue_eligible_order`
-  - `is_on_time_delivery`
-- Added automated data contract tests (9 checks) with publication-gating outputs.
-
----
-
-## QA & Governance Automation
-
-The project includes an automated KPI governance layer:
-
-- **Script:** `python/run_data_contract_tests.py`
-- **Checks:** PK/FK integrity, GMV reconciliation, KPI sanity bands, and service-quality signal directionality
-- **Generated artifacts:**
-  - `data/processed/data_contract_test_results.csv`
-  - `data/processed/data_contract_test_summary.csv`
-  - `docs/data_contract_test_report.md`
-- **Governance rule:** critical failures block KPI publication
-
-CI smoke test is included in `.github/workflows/pipeline_smoke_test.yml`.
-
----
-
-## Data Model Overview
-
-### Facts
-- `marts.fact_orders` (order grain, executive KPI base)
-- `marts.fact_order_items` (item grain, commercial deep dives)
-
-### Dimensions
-- `marts.dim_customers`
-- `marts.dim_products`
-- `marts.dim_sellers`
-- `marts.dim_dates`
-- `marts.dim_geography`
-
-This separation prevents duplicated metrics and supports both high-level and drill-down analysis.
-
----
-
-## Executive Dashboard Pages
-
-### Page 1 - Executive Overview
-![Page 1](dashboard/screenshots/page_1_executive_overview.png)
-
-### Page 2 - Customer Experience & Fulfillment
-![Page 2](dashboard/screenshots/page_2_customer_fulfillment.png)
-
-### Page 3 - Commercial Performance
-![Page 3](dashboard/screenshots/page_3_commercial_performance.png)
-
-### Page 4 - Data Quality / KPI Reliability
-![Page 4](dashboard/screenshots/page_4_data_quality_reliability.png)
-
----
-
-## Top Business Insights
-
-- **GMV:** R$15.85M across 99,441 orders.
-- **AOV:** R$159.37.
-- **On-time delivery rate:** 91.9%; late deliveries materially depress review score.
-- **CX impact of delays:** On-time orders average 4.29 review score vs 1.70 for 8+ days late.
-- **Payment concentration:** Credit card accounts for 78.3% of payment value.
-- **Retention opportunity:** repeat customer rate is ~3.1%.
-- **Operational monitoring upgrade:** weekly KPI trend + seller operational risk views + cohort retention outputs.
-
----
-
-## Tools Used
-
-- **SQL / Modeling:** DuckDB
-- **Python:** pandas, numpy, matplotlib, seaborn, requests
-- **Notebooks:** Jupyter
-- **Dashboard Output:** Executive PNG pages + PDF export
-
----
-
-## How to Reproduce Locally
+## Reproducibility
 
 ```bash
-# 1) Install dependencies
+# Install pinned dependencies
 python3 -m pip install -r requirements.txt
 
-# 2) Download real public source data
-python3 python/download_olist_data.py
-
-# 3) Build staging + marts and export KPI tables
-python3 python/build_reporting_layer.py
-
-# 4) Run data contract tests
-python3 python/run_data_contract_tests.py
-
-# 5) Generate dashboard screenshots, PDF, architecture diagram
-python3 python/generate_dashboard_assets.py
-
-# One-command pipeline (download + build + QA + dashboard)
+# End-to-end run
 python3 python/run_pipeline.py
 
-# Faster local rerun when raw data already exists
+# Faster rerun (reuse existing raw files)
 python3 python/run_pipeline.py --skip-download
 
 # Makefile shortcuts
@@ -271,27 +182,27 @@ make pipeline
 make pipeline-fast
 ```
 
-Optional exploration:
-- `python/data_quality_audit.ipynb`
-- `python/optional_etl_or_validation.ipynb`
-- `dashboard/powerbi_layout_guide.md` (visual-to-business-question mapping for Power BI build)
-- `docs/qa_framework.md` (consulting-style KPI governance framework)
+CI smoke test (`.github/workflows/pipeline_smoke_test.yml`) validates:
+- download/build/tests
+- dashboard asset generation
+- required artifact presence
+- rerun behavior with `--skip-download`
 
 ---
 
-## Future Improvements
+## Limitations
 
-1. Rebuild visuals in native Power BI with drill-through and row-level filters.
-2. Add margin/profitability metrics if COGS and returns data is available.
-3. Add freshness SLA monitoring and anomaly alert hooks.
-4. Add customer LTV/profitability analysis once contribution margin data is available.
+1. **No cost / returns / margin inputs** in source data, so profitability KPIs are out of scope.
+2. **Static exported dashboard assets** are included in repo; native `.pbix` is documented but not committed.
+3. Customer sentiment is proxied by review score and may not capture all support-channel feedback.
 
 ---
 
-## Project Deliverables for Hiring Review
+## Repo metadata suggestions
 
-- Trusted reporting layer with documented assumptions
-- Executive dashboard package (4 pages + PDF)
-- Data quality audit notebook
-- KPI definition and data dictionary documentation
-- Business-oriented executive memo with recommendations
+- **Suggested repo description:**  
+  `Consulting-style Olist BI case: trusted reporting marts, KPI governance tests, executive dashboard, and business recommendations.`
+- **Suggested GitHub topics:**  
+  `data-analytics`, `business-intelligence`, `duckdb`, `sql`, `power-bi`, `data-quality`, `kpi`, `dashboard`, `consulting`, `portfolio-project`
+- **Suggested release tag:**  
+  `v1.0.0-consulting-deliverable`

@@ -153,6 +153,13 @@ SELECT
     item_price_value,
     item_freight_value,
     item_gmv,
+    -- Commercial reporting rule:
+    -- canceled/unavailable orders are excluded from primary revenue KPIs.
+    CASE
+        WHEN order_status NOT IN ('canceled', 'unavailable')
+            AND item_gmv IS NOT NULL THEN item_gmv
+        ELSE 0
+    END AS revenue_eligible_gmv,
     payment_value_total,
     payment_record_count,
     avg_review_score,

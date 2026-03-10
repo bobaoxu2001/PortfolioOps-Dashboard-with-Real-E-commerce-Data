@@ -15,8 +15,9 @@ Author: **Allen Xu**
 | Metric | Definition | SQL Logic (Conceptual) | Grain | Caveats |
 |---|---|---|---|---|
 | Total Orders | Count of all orders in `fact_orders` | `COUNT(*)` | Order | Includes canceled/unavailable unless filtered. |
-| GMV (Revenue Proxy) | Sum of item price + freight | `SUM(item_gmv)` | Order (aggregated from item) | Proxy for gross sales, not net margin. |
-| Average Order Value (AOV) | GMV divided by order count | `AVG(item_gmv)` | Order | Includes low/zero-value orders if present. |
+| **Primary GMV (Executive Revenue KPI)** | Sum of GMV from revenue-eligible orders only | `SUM(revenue_eligible_gmv)` | Order (aggregated from item) | Excludes canceled/unavailable orders to avoid inflating commercial performance. |
+| GMV (All Orders Reference) | Sum of GMV across all orders | `SUM(item_gmv)` | Order | Transparency/reference metric only; includes non-commercial order outcomes. |
+| **Primary AOV (Executive)** | Revenue-eligible GMV divided by revenue-eligible orders | `SUM(revenue_eligible_gmv) / COUNT(revenue_eligible_orders)` | Order | Weighted definition avoids denominator distortion from canceled/unavailable orders. |
 | Cancellation Rate | Share of orders with status canceled or unavailable | `AVG(is_canceled_or_unavailable)` | Order | Combines canceled + unavailable by design. |
 | Avg Review Score | Mean customer review score | `AVG(avg_review_score)` | Order | Orders without reviews are excluded from numerator/denominator in score average. |
 | Avg Delivery Days | Purchase-to-delivery elapsed days | `AVG(delivery_days)` | Delivered order | Null when order not delivered. |
@@ -65,4 +66,5 @@ Using `delivery_days - estimated_delivery_days`:
 
 ### Guardrail 3: Explicit revenue eligibility flag
 - `is_revenue_eligible_order = 1` when order not canceled/unavailable and GMV present.
-- Allows leadership views that separate booked GMV from in-flight/canceled orders.
+- `revenue_eligible_gmv = item_gmv` only for revenue-eligible orders; otherwise `0`.
+- Allows leadership views that separate realized commercial GMV from in-flight/canceled outcomes.

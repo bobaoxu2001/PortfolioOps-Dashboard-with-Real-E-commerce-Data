@@ -93,9 +93,19 @@ def main() -> None:
     fig1 = plt.figure(figsize=(16, 9))
     gs1 = fig1.add_gridspec(3, 4, height_ratios=[1, 2.3, 2.3])
     card_axes = [fig1.add_subplot(gs1[0, i]) for i in range(4)]
-    add_kpi_card(card_axes[0], "GMV", format_millions(headline["total_gmv"]), "Reporting layer total")
+    add_kpi_card(
+        card_axes[0],
+        "Primary GMV",
+        format_millions(headline["gmv_revenue_eligible"]),
+        "Revenue-eligible orders only",
+    )
     add_kpi_card(card_axes[1], "Orders", f"{int(headline['total_orders']):,}", "All order statuses")
-    add_kpi_card(card_axes[2], "AOV", f"R${headline['aov']:.2f}", "GMV / orders")
+    add_kpi_card(
+        card_axes[2],
+        "Primary AOV",
+        f"R${headline['aov_revenue_eligible']:.2f}",
+        "Revenue-eligible GMV / eligible orders",
+    )
     add_kpi_card(card_axes[3], "Cancellation Rate", format_pct(headline["cancellation_rate"]), "Canceled + unavailable")
 
     ax11 = fig1.add_subplot(gs1[1, :2])
@@ -103,8 +113,8 @@ def main() -> None:
     ax13 = fig1.add_subplot(gs1[2, :2])
     ax14 = fig1.add_subplot(gs1[2, 2:])
 
-    ax11.plot(trend["month_start"], trend["total_gmv"], color="#1B5E9A", linewidth=2.2)
-    ax11.set_title("Monthly GMV Trend")
+    ax11.plot(trend["month_start"], trend["gmv_revenue_eligible"], color="#1B5E9A", linewidth=2.2)
+    ax11.set_title("Monthly Primary GMV Trend")
     ax11.set_ylabel("GMV (R$)")
 
     ax12.plot(trend["month_start"], trend["total_orders"], color="#2E7D32", linewidth=2.2)
@@ -172,21 +182,21 @@ def main() -> None:
     ax33 = fig3.add_subplot(gs3[1, 0])
     ax34 = fig3.add_subplot(gs3[1, 1])
 
-    category_top = category.nlargest(12, "gmv")
-    sns.barplot(data=category_top, y="category", x="gmv", ax=ax31, color="#2E7D32")
-    ax31.set_title("Top Categories by GMV")
+    category_top = category.nlargest(12, "gmv_revenue_eligible")
+    sns.barplot(data=category_top, y="category", x="gmv_revenue_eligible", ax=ax31, color="#2E7D32")
+    ax31.set_title("Top Categories by Primary GMV")
     ax31.set_xlabel("GMV (R$)")
     ax31.set_ylabel("")
 
-    seller_top = seller.nlargest(12, "gmv")
-    sns.barplot(data=seller_top, y="seller_id", x="gmv", ax=ax32, color="#1B5E9A")
-    ax32.set_title("Top Sellers by GMV")
+    seller_top = seller.nlargest(12, "gmv_revenue_eligible")
+    sns.barplot(data=seller_top, y="seller_id", x="gmv_revenue_eligible", ax=ax32, color="#1B5E9A")
+    ax32.set_title("Top Sellers by Primary GMV")
     ax32.set_xlabel("GMV (R$)")
     ax32.set_ylabel("")
 
-    state_gmv = state.nlargest(10, "gmv")
-    sns.barplot(data=state_gmv, x="customer_state", y="gmv", ax=ax33, color="#6A1B9A")
-    ax33.set_title("Top States by GMV")
+    state_gmv = state.nlargest(10, "gmv_revenue_eligible")
+    sns.barplot(data=state_gmv, x="customer_state", y="gmv_revenue_eligible", ax=ax33, color="#6A1B9A")
+    ax33.set_title("Top States by Primary GMV")
     ax33.set_xlabel("State")
     ax33.set_ylabel("GMV (R$)")
 
@@ -216,8 +226,8 @@ def main() -> None:
         0.68,
         (
             f"Naive join GMV: R${join_risk['naive_gmv']:,.0f}\n"
-            f"Trusted GMV: R${join_risk['trusted_gmv']:,.0f}\n"
-            f"Overstatement risk: R${join_risk['gmv_overstatement']:,.0f}"
+            f"Trusted GMV (all orders): R${join_risk['trusted_gmv_all_orders']:,.0f}\n"
+            f"Overstatement risk: R${join_risk['gmv_overstatement_vs_all_orders']:,.0f}"
         ),
         fontsize=12,
     )
@@ -249,6 +259,23 @@ def main() -> None:
     with PdfPages(pdf_path) as pdf:
         for fig in [fig1, fig2, fig3, fig4]:
             pdf.savefig(fig, bbox_inches="tight")
+
+    collage_path = screenshot_dir / "dashboard_collage.png"
+    collage_fig, collage_axes = plt.subplots(2, 2, figsize=(16, 9))
+    collage_sources = [
+        (screenshot_dir / "page_1_executive_overview.png", "Executive Overview"),
+        (screenshot_dir / "page_2_customer_fulfillment.png", "CX & Fulfillment"),
+        (screenshot_dir / "page_3_commercial_performance.png", "Commercial Performance"),
+        (screenshot_dir / "page_4_data_quality_reliability.png", "Data Quality & KPI Trust"),
+    ]
+    for ax, (img_path, title) in zip(collage_axes.flatten(), collage_sources):
+        ax.imshow(plt.imread(img_path))
+        ax.set_title(title, fontsize=11, fontweight="bold")
+        ax.axis("off")
+    collage_fig.suptitle("Executive Dashboard Package Preview", fontsize=16, fontweight="bold")
+    collage_fig.tight_layout()
+    collage_fig.savefig(collage_path, dpi=180, bbox_inches="tight")
+    plt.close(collage_fig)
 
     for fig in [fig1, fig2, fig3, fig4]:
         plt.close(fig)

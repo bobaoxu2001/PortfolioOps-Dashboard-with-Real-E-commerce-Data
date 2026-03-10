@@ -26,8 +26,9 @@ This engagement built a centralized reporting layer and executive dashboard to i
 ## 3) KPI Highlights (Trusted Model Output)
 
 - **Total orders:** 99,441  
-- **GMV (price + freight proxy):** **R$15.85M**  
-- **AOV:** **R$159.37**  
+- **Primary GMV (revenue-eligible):** **R$15.74M**  
+- **GMV all-orders reference:** R$15.85M  
+- **Primary AOV (revenue-eligible):** **R$160.29**  
 - **Cancellation rate (canceled + unavailable):** **1.24%**  
 - **Average review score:** **4.09 / 5**  
 - **Average delivery time:** **12.5 days**  
@@ -35,7 +36,7 @@ This engagement built a centralized reporting layer and executive dashboard to i
 
 Additional observations:
 - Payment concentration is high in **credit card (78.3% of payment value)**.
-- Top commercial state is **SP** (R$5.92M GMV), while **RJ** shows large volume with materially slower delivery (15.2 days avg).
+- Top commercial state is **SP** (R$5.88M primary GMV), while **RJ** shows large volume with materially slower delivery (15.2 days avg).
 - Delay strongly correlates with customer satisfaction:  
   **On-time review = 4.29**, vs **8+ days late review = 1.70**.
 - Repeat customer rate is low (**3.1%** of unique customers), indicating retention opportunity.

@@ -28,18 +28,25 @@ def main() -> None:
 
     db_path = processed_dir / "olist_reporting.duckdb"
     conn = duckdb.connect(str(db_path))
+    conn.execute("PRAGMA threads = 1")
 
     for sql_file in ["01_schema.sql", "02_staging.sql", "03_marts.sql"]:
         run_sql_file(conn, sql_dir / sql_file)
 
+    # Executive commercial KPI rule:
+    # canceled/unavailable orders are operational outcomes, not realized commercial revenue.
+    # Primary revenue metrics therefore use revenue-eligible orders only.
     export_query(
         conn,
         """
         SELECT
             DATE_TRUNC('week', order_purchase_ts)::DATE AS week_start,
             COUNT(*) AS total_orders,
-            SUM(COALESCE(item_gmv, 0)) AS total_gmv,
-            AVG(COALESCE(item_gmv, 0)) AS aov,
+            COUNT(CASE WHEN is_revenue_eligible_order = 1 THEN 1 END) AS revenue_eligible_orders,
+            SUM(COALESCE(item_gmv, 0)) AS gmv_all_orders,
+            SUM(COALESCE(revenue_eligible_gmv, 0)) AS gmv_revenue_eligible,
+            SUM(COALESCE(revenue_eligible_gmv, 0))
+                / NULLIF(COUNT(CASE WHEN is_revenue_eligible_order = 1 THEN 1 END), 0) AS aov_revenue_eligible,
             AVG(CASE WHEN is_canceled_or_unavailable = 1 THEN 1.0 ELSE 0.0 END) AS cancellation_rate,
             AVG(avg_review_score) AS avg_review_score,
             AVG(delivery_days) AS avg_delivery_days,
@@ -127,9 +134,10 @@ def main() -> None:
         SELECT
             s.seller_id,
             ds.seller_state,
-            COUNT(*) AS orders,
-            SUM(s.order_gmv) AS gmv,
-            AVG(s.order_gmv) AS avg_order_gmv,
+            COUNT(*) AS orders_all,
+            COUNT(CASE WHEN fo.is_revenue_eligible_order = 1 THEN 1 END) AS orders_revenue_eligible,
+            SUM(CASE WHEN fo.is_revenue_eligible_order = 1 THEN s.order_gmv ELSE 0 END) AS gmv_revenue_eligible,
+            AVG(CASE WHEN fo.is_revenue_eligible_order = 1 THEN s.order_gmv END) AS avg_order_gmv_revenue_eligible,
             AVG(CASE WHEN fo.is_on_time_delivery = 0 THEN 1.0 ELSE 0.0 END) AS late_delivery_rate,
             AVG(CASE WHEN fo.is_canceled_or_unavailable = 1 THEN 1.0 ELSE 0.0 END) AS cancellation_rate,
             AVG(fo.avg_review_score) AS avg_review_score
@@ -140,7 +148,7 @@ def main() -> None:
             ON s.seller_id = ds.seller_id
         GROUP BY 1, 2
         HAVING COUNT(*) >= 30
-        ORDER BY gmv DESC
+        ORDER BY gmv_revenue_eligible DESC, s.seller_id
         """,
         processed_dir / "kpi_seller_operational_risk.csv",
     )
@@ -151,8 +159,11 @@ def main() -> None:
         SELECT
             DATE_TRUNC('month', order_purchase_ts)::DATE AS month_start,
             COUNT(*) AS total_orders,
-            SUM(COALESCE(item_gmv, 0)) AS total_gmv,
-            AVG(COALESCE(item_gmv, 0)) AS aov,
+            COUNT(CASE WHEN is_revenue_eligible_order = 1 THEN 1 END) AS revenue_eligible_orders,
+            SUM(COALESCE(item_gmv, 0)) AS gmv_all_orders,
+            SUM(COALESCE(revenue_eligible_gmv, 0)) AS gmv_revenue_eligible,
+            SUM(COALESCE(revenue_eligible_gmv, 0))
+                / NULLIF(COUNT(CASE WHEN is_revenue_eligible_order = 1 THEN 1 END), 0) AS aov_revenue_eligible,
             AVG(CASE WHEN is_canceled_or_unavailable = 1 THEN 1.0 ELSE 0.0 END) AS cancellation_rate,
             AVG(avg_review_score) AS avg_review_score,
             AVG(delivery_days) AS avg_delivery_days,
@@ -197,13 +208,16 @@ def main() -> None:
         SELECT
             COALESCE(p.product_category_name_en, 'unknown') AS category,
             COUNT(DISTINCT i.order_id) AS orders,
-            SUM(i.gmv) AS gmv,
-            AVG(i.gmv) AS avg_item_value
+            SUM(i.gmv) AS gmv_revenue_eligible,
+            AVG(i.gmv) AS avg_item_value_revenue_eligible
         FROM marts.fact_order_items i
+        INNER JOIN marts.fact_orders o
+            ON i.order_id = o.order_id
+           AND o.is_revenue_eligible_order = 1
         LEFT JOIN marts.dim_products p
             ON i.product_id = p.product_id
         GROUP BY 1
-        ORDER BY gmv DESC
+        ORDER BY gmv_revenue_eligible DESC, category
         """,
         processed_dir / "kpi_category_performance.csv",
     )
@@ -215,13 +229,16 @@ def main() -> None:
             s.seller_state,
             sp.seller_id,
             COUNT(DISTINCT sp.order_id) AS orders,
-            SUM(sp.seller_gmv) AS gmv,
-            AVG(sp.seller_gmv) AS avg_order_gmv
+            SUM(sp.seller_gmv) AS gmv_revenue_eligible,
+            AVG(sp.seller_gmv) AS avg_order_gmv_revenue_eligible
         FROM marts.vw_order_seller_performance sp
+        INNER JOIN marts.fact_orders o
+            ON sp.order_id = o.order_id
+           AND o.is_revenue_eligible_order = 1
         LEFT JOIN marts.dim_sellers s
             ON sp.seller_id = s.seller_id
         GROUP BY 1, 2
-        ORDER BY gmv DESC
+        ORDER BY gmv_revenue_eligible DESC, sp.seller_id
         """,
         processed_dir / "kpi_seller_performance.csv",
     )
@@ -232,14 +249,15 @@ def main() -> None:
         SELECT
             c.customer_state,
             COUNT(DISTINCT o.order_id) AS orders,
-            SUM(COALESCE(o.item_gmv, 0)) AS gmv,
+            SUM(COALESCE(o.item_gmv, 0)) AS gmv_all_orders,
+            SUM(COALESCE(o.revenue_eligible_gmv, 0)) AS gmv_revenue_eligible,
             AVG(o.avg_review_score) AS avg_review_score,
             AVG(o.delivery_days) AS avg_delivery_days
         FROM marts.fact_orders o
         LEFT JOIN marts.dim_customers c
             ON o.customer_id = c.customer_id
         GROUP BY 1
-        ORDER BY gmv DESC
+        ORDER BY gmv_revenue_eligible DESC, c.customer_state
         """,
         processed_dir / "kpi_state_performance.csv",
     )
@@ -254,9 +272,44 @@ def main() -> None:
             AVG(payment_value) AS avg_payment_value
         FROM staging.stg_order_payments
         GROUP BY 1
-        ORDER BY payment_value DESC
+        ORDER BY payment_value DESC, payment_type
         """,
         processed_dir / "kpi_payment_mix.csv",
+    )
+
+    export_query(
+        conn,
+        """
+        WITH seller_gmv AS (
+            SELECT
+                i.seller_id,
+                SUM(i.gmv) AS gmv_revenue_eligible
+            FROM marts.fact_order_items i
+            INNER JOIN marts.fact_orders o
+                ON i.order_id = o.order_id
+               AND o.is_revenue_eligible_order = 1
+            GROUP BY 1
+        ),
+        ranked AS (
+            SELECT
+                seller_id,
+                gmv_revenue_eligible,
+                ROW_NUMBER() OVER (ORDER BY gmv_revenue_eligible DESC, seller_id) AS seller_rank,
+                SUM(gmv_revenue_eligible) OVER () AS total_gmv_revenue_eligible
+            FROM seller_gmv
+        )
+        SELECT
+            total_gmv_revenue_eligible,
+            SUM(CASE WHEN seller_rank <= 5 THEN gmv_revenue_eligible ELSE 0 END) AS top_5_seller_gmv,
+            SUM(CASE WHEN seller_rank <= 10 THEN gmv_revenue_eligible ELSE 0 END) AS top_10_seller_gmv,
+            SUM(CASE WHEN seller_rank <= 50 THEN gmv_revenue_eligible ELSE 0 END) AS top_50_seller_gmv,
+            SUM(CASE WHEN seller_rank <= 5 THEN gmv_revenue_eligible ELSE 0 END) / NULLIF(total_gmv_revenue_eligible, 0) AS top_5_share,
+            SUM(CASE WHEN seller_rank <= 10 THEN gmv_revenue_eligible ELSE 0 END) / NULLIF(total_gmv_revenue_eligible, 0) AS top_10_share,
+            SUM(CASE WHEN seller_rank <= 50 THEN gmv_revenue_eligible ELSE 0 END) / NULLIF(total_gmv_revenue_eligible, 0) AS top_50_share
+        FROM ranked
+        GROUP BY total_gmv_revenue_eligible
+        """,
+        processed_dir / "kpi_seller_concentration.csv",
     )
 
     export_query(
@@ -302,13 +355,15 @@ def main() -> None:
                 ON oi.order_id = p.order_id
         ),
         correct_join AS (
-            SELECT SUM(item_gmv) AS trusted_gmv
+            SELECT SUM(item_gmv) AS trusted_gmv_all_orders,
+                   SUM(revenue_eligible_gmv) AS trusted_gmv_revenue_eligible
             FROM marts.fact_orders
         )
         SELECT
             n.naive_gmv,
-            c.trusted_gmv,
-            n.naive_gmv - c.trusted_gmv AS gmv_overstatement
+            c.trusted_gmv_all_orders,
+            c.trusted_gmv_revenue_eligible,
+            n.naive_gmv - c.trusted_gmv_all_orders AS gmv_overstatement_vs_all_orders
         FROM naive_join n
         CROSS JOIN correct_join c
         """,
@@ -333,6 +388,7 @@ def main() -> None:
             UNION ALL SELECT 'marts.dim_products', COUNT(*) FROM marts.dim_products
             UNION ALL SELECT 'marts.dim_sellers', COUNT(*) FROM marts.dim_sellers
             UNION ALL SELECT 'marts.dim_dates', COUNT(*) FROM marts.dim_dates
+            UNION ALL SELECT 'kpi.seller_concentration', COUNT(*) FROM read_csv_auto('data/processed/kpi_seller_concentration.csv', header = TRUE)
             UNION ALL SELECT 'kpi.weekly_ops', COUNT(*) FROM (
                 SELECT DATE_TRUNC('week', order_purchase_ts)::DATE AS week_start FROM marts.fact_orders GROUP BY 1
             ) q1
@@ -362,8 +418,11 @@ def main() -> None:
         """
         SELECT
             COUNT(*) AS total_orders,
-            SUM(COALESCE(item_gmv, 0)) AS total_gmv,
-            AVG(COALESCE(item_gmv, 0)) AS aov,
+            COUNT(CASE WHEN is_revenue_eligible_order = 1 THEN 1 END) AS revenue_eligible_orders,
+            SUM(COALESCE(item_gmv, 0)) AS gmv_all_orders,
+            SUM(COALESCE(revenue_eligible_gmv, 0)) AS gmv_revenue_eligible,
+            SUM(COALESCE(revenue_eligible_gmv, 0))
+                / NULLIF(COUNT(CASE WHEN is_revenue_eligible_order = 1 THEN 1 END), 0) AS aov_revenue_eligible,
             AVG(CASE WHEN is_canceled_or_unavailable = 1 THEN 1.0 ELSE 0.0 END) AS cancellation_rate,
             AVG(avg_review_score) AS avg_review_score,
             AVG(delivery_days) AS avg_delivery_days,

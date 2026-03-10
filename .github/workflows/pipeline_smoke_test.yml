@@ -32,3 +32,40 @@ jobs:
 
       - name: Run data contract checks
         run: python python/run_data_contract_tests.py
+
+      - name: Generate dashboard assets
+        run: python python/generate_dashboard_assets.py
+
+      - name: Verify required output artifacts
+        run: |
+          required_files=(
+            "dashboard/dashboard_export.pdf"
+            "dashboard/screenshots/page_1_executive_overview.png"
+            "dashboard/screenshots/page_2_customer_fulfillment.png"
+            "dashboard/screenshots/page_3_commercial_performance.png"
+            "dashboard/screenshots/page_4_data_quality_reliability.png"
+            "dashboard/screenshots/dashboard_collage.png"
+            "data/processed/kpi_headline.csv"
+            "data/processed/kpi_monthly.csv"
+            "data/processed/kpi_weekly_ops.csv"
+            "data/processed/kpi_category_performance.csv"
+            "data/processed/kpi_seller_performance.csv"
+            "data/processed/kpi_state_performance.csv"
+            "data/processed/kpi_payment_mix.csv"
+            "data/processed/kpi_delay_vs_reviews.csv"
+            "data/processed/kpi_seller_concentration.csv"
+            "data/processed/data_quality_summary.csv"
+            "data/processed/kpi_join_risk_demo.csv"
+            "data/processed/data_contract_test_results.csv"
+            "data/processed/data_contract_test_summary.csv"
+          )
+          for file in "${required_files[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "Missing required artifact: $file"
+              exit 1
+            fi
+          done
+          echo "All required artifacts exist."
+
+      - name: Validate deterministic rerun behavior
+        run: python python/run_pipeline.py --skip-download

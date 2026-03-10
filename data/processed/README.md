@@ -9,13 +9,14 @@ python3 python/build_reporting_layer.py
 Key files:
 
 - `kpi_headline.csv` - one-row executive KPI snapshot
-- `kpi_monthly.csv` - monthly KPI trend table
-- `kpi_weekly_ops.csv` - weekly operational KPI trend table
+- `kpi_monthly.csv` - monthly KPI trend table (includes primary vs all-orders GMV)
+- `kpi_weekly_ops.csv` - weekly operational KPI trend table (includes primary vs all-orders GMV)
 - `kpi_active_customers_monthly.csv` - monthly active customer counts
 - `kpi_customer_cohort_retention.csv` - cohort retention matrix output
 - `kpi_category_performance.csv`
 - `kpi_seller_performance.csv`
 - `kpi_seller_operational_risk.csv` - seller service/risk profile (30+ orders)
+- `kpi_seller_concentration.csv` - top seller concentration share KPI
 - `kpi_state_performance.csv`
 - `kpi_payment_mix.csv`
 - `kpi_delay_vs_reviews.csv`

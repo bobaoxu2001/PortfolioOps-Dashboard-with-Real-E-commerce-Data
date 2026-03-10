@@ -1,65 +1,76 @@
 # Power BI Layout Guide (Executive Dashboard)
 
-This file documents the intended Power BI implementation of the 4-page dashboard package.
+This guide maps each visual to business intent so reviewers can quickly assess consulting-grade dashboard design quality.
 
-## Page 1 - Executive Overview
+## Core KPI Convention (must be consistent across all pages)
 
-**Visuals**
-1. KPI cards: GMV, Total Orders, AOV, Cancellation Rate  
-   - Why: gives leadership a one-screen health check.
-2. Monthly GMV line  
-   - Why: shows top-line trajectory and seasonality.
-3. Monthly Orders line  
-   - Why: separates demand trend from ticket size effects.
-4. Service reliability trend (On-time vs Cancellation)  
-   - Why: quickly flags operational risk.
-5. Customer experience trend (Review + Delivery Days)  
-   - Why: connects logistics performance to customer sentiment.
+- **Primary Revenue KPI:** `gmv_revenue_eligible`
+- **Primary AOV KPI:** `aov_revenue_eligible`
+- **Why:** canceled/unavailable orders are not realized commercial outcomes and should not inflate commercial KPIs.
+- **Transparency companion metric:** `gmv_all_orders`
 
-## Page 2 - Customer Experience & Fulfillment
+---
 
-**Visuals**
-1. Delay bucket order volume bar chart  
-   - Why: quantifies fulfillment exceptions.
-2. Delay bucket review score bar chart  
-   - Why: ties delay severity to NPS-like experience outcomes.
-3. State delivery-time comparison  
-   - Why: identifies where to prioritize logistics intervention.
-4. State review-score comparison  
-   - Why: validates whether service issues are customer-visible.
+## Page 1 - Executive Overview (Audience: CEO / COO / CFO)
 
-## Page 3 - Commercial Performance
+| Visual | Business Question | Metric Definition | Recommended Slicers | Audience |
+|---|---|---|---|---|
+| KPI Card: Primary GMV | What realized commercial value did we generate? | `SUM(gmv_revenue_eligible)` | Date, state, category | CEO/CFO |
+| KPI Card: Total Orders | How much order demand is flowing through the system? | `COUNT(order_id)` | Date, state | COO |
+| KPI Card: Primary AOV | Is basket economics improving? | `gmv_revenue_eligible / revenue_eligible_orders` | Date, category | CEO/CFO |
+| KPI Card: Cancellation Rate | Is order fallout rising? | `AVG(is_canceled_or_unavailable)` | Date, state, seller | COO |
+| Line: Monthly Primary GMV | Is top-line trajectory healthy? | Monthly `gmv_revenue_eligible` | Date | CEO/CFO |
+| Line: Monthly Orders | Is demand increasing independently of basket value? | Monthly `COUNT(order_id)` | Date | CEO/COO |
+| Dual line: On-time vs Cancel | Are reliability issues growing? | On-time rate + cancellation rate | Date, state | COO |
+| Dual axis: Review vs Delivery Days | Is service performance visible to customers? | Avg review + avg delivery days | Date, state | COO/Customer Ops |
 
-**Visuals**
-1. Top category GMV bar chart  
-   - Why: supports assortment and investment allocation.
-2. Top seller GMV bar chart  
-   - Why: highlights partner concentration and account priorities.
-3. State GMV bar chart  
-   - Why: informs regional commercial strategy.
-4. Payment mix pie chart (or stacked bar in production)  
-   - Why: reveals dependence on payment channels.
+---
 
-## Page 4 - Data Quality / KPI Reliability
+## Page 2 - Customer Experience & Fulfillment (Audience: COO / CX Lead / Logistics Lead)
 
-**Visuals**
-1. Data quality issue counts  
-   - Why: makes metric risk visible for leadership governance.
-2. Join-risk KPI panel (naive vs trusted GMV)  
-   - Why: demonstrates why curated marts are mandatory.
-3. Governance actions summary  
-   - Why: communicates control framework and trust-building actions.
+| Visual | Business Question | Metric Definition | Recommended Slicers | Audience |
+|---|---|---|---|---|
+| Bar: Delay bucket order count | Where is fulfillment friction concentrated? | Orders by delay bucket | Date, state | COO |
+| Bar: Delay bucket review score | How much do delays hurt customer sentiment? | Avg review by delay bucket | Date, category | CX Lead |
+| Bar: Avg delivery days by state | Which regions need logistics intervention? | Avg delivery days | Date, state group | Logistics |
+| Bar: Avg review by state | Do regional ops issues affect customer satisfaction? | Avg review score | Date, state | CX Lead |
 
-## Recommended Slicers
+---
 
-- Date range (month/quarter/year)
+## Page 3 - Commercial Performance (Audience: Commercial Director / Category Manager / Seller Ops)
+
+| Visual | Business Question | Metric Definition | Recommended Slicers | Audience |
+|---|---|---|---|---|
+| Bar: Top categories by primary GMV | Which categories drive monetized volume? | `gmv_revenue_eligible` by category | Date, state | Category Lead |
+| Bar: Top sellers by primary GMV | Which sellers are most commercially material? | `gmv_revenue_eligible` by seller | Date, seller state | Seller Ops |
+| Bar: Top states by primary GMV | Which markets are strongest commercially? | `gmv_revenue_eligible` by state | Date, category | Commercial Director |
+| Pie/100% bar: Payment mix | How concentrated is payment channel dependence? | Share of payment value by type | Date | CFO/Payments |
+
+---
+
+## Page 4 - Data Quality / KPI Reliability (Audience: Leadership + Analytics Governance)
+
+| Visual | Business Question | Metric Definition | Recommended Slicers | Audience |
+|---|---|---|---|---|
+| Bar: Data quality checks | What source/model risks can distort decisions? | Count by check_name | Data layer | Exec + Data Lead |
+| KPI panel: Naive vs Trusted GMV | What is the financial impact of bad joins? | Naive GMV, trusted GMV, overstatement | None | CFO/Data Lead |
+| Text panel: Governance actions | What controls are in place before publication? | Narrative from QA framework | None | Leadership |
+
+---
+
+## Global Slicer Set
+
+- Date (month/quarter/year)
 - Customer state
 - Product category
 - Seller state
 - Order status
+- Revenue inclusion view (`Primary: revenue-eligible` vs `All-orders reference`)
 
-## Design Notes
+---
 
-- Use a clean executive palette with no more than 5 core colors.
-- Keep labels short and business-facing.
-- Use tooltips for technical details; keep page-level visuals concise.
+## Build Notes
+
+1. Use a clean executive palette (max 5 core colors).
+2. Keep chart titles in business language; move technical caveats to tooltips.
+3. Add a small subtitle on commercial charts: **"Primary revenue = revenue-eligible orders only."**

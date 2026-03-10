@@ -1,2 +1,2 @@
-total_orders,total_gmv,aov,cancellation_rate,avg_review_score,avg_delivery_days,on_time_rate
-99441,15848243.139999082,159.37332830521697,0.012409368369183738,4.088993284487064,12.497336125046644,0.9188710145528421
+total_orders,revenue_eligible_orders,gmv_all_orders,gmv_revenue_eligible,aov_revenue_eligible,cancellation_rate,avg_review_score,avg_delivery_days,on_time_rate
+99441,98199,15848243.1399991,15740216.929999085,160.2889737166273,0.012409368369183738,4.089171152068722,12.497336125046644,0.9188710145528421

@@ -51,6 +51,7 @@ Project: Olist Centralized Reporting Layer
 | `item_price_value` | DOUBLE | Sum of item prices. |
 | `item_freight_value` | DOUBLE | Sum of freight value. |
 | `item_gmv` | DOUBLE | Revenue proxy (`price + freight`). |
+| `revenue_eligible_gmv` | DOUBLE | Primary revenue KPI component; zero for canceled/unavailable orders. |
 | `payment_value_total` | DOUBLE | Sum of payment records per order. |
 | `avg_review_score` | DOUBLE | Average review score per order. |
 | `delivery_days` | BIGINT | Days from purchase to delivery. |

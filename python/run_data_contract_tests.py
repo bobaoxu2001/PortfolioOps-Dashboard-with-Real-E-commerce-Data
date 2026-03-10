@@ -12,6 +12,13 @@ def _fetch_scalar(conn: duckdb.DuckDBPyConnection, query: str) -> float:
     return conn.execute(query).fetchone()[0]
 
 
+def _load_single_row_csv(path: pathlib.Path) -> pd.Series:
+    df = pd.read_csv(path)
+    if len(df) != 1:
+        raise ValueError(f"Expected exactly 1 row in {path}, found {len(df)}")
+    return df.iloc[0]
+
+
 def main() -> None:
     repo_root = pathlib.Path(__file__).resolve().parents[1]
     processed_dir = repo_root / "data" / "processed"
@@ -19,6 +26,7 @@ def main() -> None:
 
     db_path = processed_dir / "olist_reporting.duckdb"
     conn = duckdb.connect(str(db_path))
+    conn.execute("PRAGMA threads = 1")
 
     tests = []
 
@@ -34,12 +42,9 @@ def main() -> None:
             }
         )
 
-    order_pk_violations = _fetch_scalar(
-        conn,
-        "SELECT COUNT(*) - COUNT(DISTINCT order_id) FROM marts.fact_orders",
-    )
+    order_pk_violations = _fetch_scalar(conn, "SELECT COUNT(*) - COUNT(DISTINCT order_id) FROM marts.fact_orders")
     add_test(
-        "fact_orders_order_id_unique",
+        "Fact Orders has one row per order",
         "critical",
         order_pk_violations,
         order_pk_violations == 0,
@@ -52,7 +57,7 @@ def main() -> None:
         "SELECT COUNT(*) - COUNT(DISTINCT CONCAT(order_id, '|', CAST(order_item_id AS VARCHAR))) FROM marts.fact_order_items",
     )
     add_test(
-        "fact_order_items_key_unique",
+        "Fact Order Items has unique item keys",
         "critical",
         item_pk_violations,
         item_pk_violations == 0,
@@ -70,7 +75,7 @@ def main() -> None:
         """,
     )
     add_test(
-        "fact_orders_customer_fk_integrity",
+        "Fact Orders customer foreign key integrity",
         "critical",
         missing_customers,
         missing_customers == 0,
@@ -88,7 +93,7 @@ def main() -> None:
         """,
     )
     add_test(
-        "fact_order_items_product_fk_integrity",
+        "Fact Order Items product foreign key integrity",
         "critical",
         missing_products,
         missing_products == 0,
@@ -96,7 +101,7 @@ def main() -> None:
         "Order items should always map to a product dimension row.",
     )
 
-    gmv_diff = _fetch_scalar(
+    gmv_diff_all_orders = _fetch_scalar(
         conn,
         """
         WITH item_level AS (
@@ -113,12 +118,140 @@ def main() -> None:
         """,
     )
     add_test(
-        "gmv_reconciliation_item_vs_order",
+        "All-orders GMV reconciles between item and order facts",
         "critical",
-        gmv_diff,
-        abs(gmv_diff) < 0.01,
+        gmv_diff_all_orders,
+        abs(gmv_diff_all_orders) < 0.01,
         "absolute difference < 0.01",
         "Order-level GMV must reconcile to item-level GMV.",
+    )
+
+    gmv_diff_revenue_eligible = _fetch_scalar(
+        conn,
+        """
+        WITH item_level AS (
+            SELECT SUM(i.gmv) AS total_gmv
+            FROM marts.fact_order_items i
+            INNER JOIN marts.fact_orders o
+                ON i.order_id = o.order_id
+            WHERE o.is_revenue_eligible_order = 1
+        ),
+        order_level AS (
+            SELECT SUM(revenue_eligible_gmv) AS total_gmv
+            FROM marts.fact_orders
+        )
+        SELECT item_level.total_gmv - order_level.total_gmv
+        FROM item_level
+        CROSS JOIN order_level
+        """,
+    )
+    add_test(
+        "Revenue-eligible GMV reconciles across grains",
+        "critical",
+        gmv_diff_revenue_eligible,
+        abs(gmv_diff_revenue_eligible) < 0.01,
+        "absolute difference < 0.01",
+        "Primary revenue KPI must match whether computed from items or orders.",
+    )
+
+    revenue_eligible_order_count = _fetch_scalar(
+        conn,
+        "SELECT COUNT(*) FROM marts.fact_orders WHERE is_revenue_eligible_order = 1",
+    )
+    add_test(
+        "Revenue-eligible order count is non-zero",
+        "critical",
+        revenue_eligible_order_count,
+        revenue_eligible_order_count > 0,
+        "> 0",
+        "Primary revenue KPIs cannot be published with zero qualifying orders.",
+    )
+
+    cancellation_exclusion_leakage = _fetch_scalar(
+        conn,
+        """
+        SELECT SUM(COALESCE(revenue_eligible_gmv, 0))
+        FROM marts.fact_orders
+        WHERE order_status IN ('canceled', 'unavailable')
+        """,
+    )
+    add_test(
+        "Primary revenue excludes canceled and unavailable orders",
+        "critical",
+        cancellation_exclusion_leakage,
+        abs(cancellation_exclusion_leakage) < 0.01,
+        "absolute value < 0.01",
+        "Canceled/unavailable orders are operational outcomes and should not inflate commercial KPIs.",
+    )
+
+    delivered_logic_coverage = _fetch_scalar(
+        conn,
+        """
+        SELECT
+            AVG(CASE WHEN is_on_time_delivery IS NULL THEN 0.0 ELSE 1.0 END)
+        FROM marts.fact_orders
+        WHERE order_status = 'delivered'
+        """,
+    )
+    add_test(
+        "Delivered orders have expected on-time logic coverage",
+        "warning",
+        delivered_logic_coverage,
+        delivered_logic_coverage >= 0.995,
+        ">= 0.995",
+        "Delivered orders should almost always have enough timestamp data for on-time classification.",
+    )
+
+    headline_row = _load_single_row_csv(processed_dir / "kpi_headline.csv")
+    headline_aov_expected = (
+        float(headline_row["gmv_revenue_eligible"]) / float(headline_row["revenue_eligible_orders"])
+        if float(headline_row["revenue_eligible_orders"]) != 0
+        else 0.0
+    )
+    headline_aov_diff = float(headline_row["aov_revenue_eligible"]) - headline_aov_expected
+    add_test(
+        "Headline AOV matches defined formula",
+        "critical",
+        headline_aov_diff,
+        abs(headline_aov_diff) < 1e-6,
+        "absolute difference < 0.000001",
+        "AOV must equal revenue-eligible GMV divided by revenue-eligible order count.",
+    )
+
+    monthly_df = pd.read_csv(processed_dir / "kpi_monthly.csv")
+    monthly_gmv_diff = float(monthly_df["gmv_revenue_eligible"].sum() - float(headline_row["gmv_revenue_eligible"]))
+    add_test(
+        "Monthly primary GMV reconciles to headline primary GMV",
+        "critical",
+        monthly_gmv_diff,
+        abs(monthly_gmv_diff) < 0.01,
+        "absolute difference < 0.01",
+        "Roll-up checks prevent hidden leakage between monthly reporting and headline KPIs.",
+    )
+
+    monthly_order_diff = float(monthly_df["revenue_eligible_orders"].sum() - float(headline_row["revenue_eligible_orders"]))
+    add_test(
+        "Monthly revenue-eligible order count reconciles to headline",
+        "critical",
+        monthly_order_diff,
+        abs(monthly_order_diff) < 0.01,
+        "absolute difference < 0.01",
+        "Primary order volume denominator should align across all executive summary layers.",
+    )
+
+    monthly_aov_weighted = (
+        float(monthly_df["gmv_revenue_eligible"].sum()) / float(monthly_df["revenue_eligible_orders"].sum())
+        if float(monthly_df["revenue_eligible_orders"].sum()) != 0
+        else 0.0
+    )
+    monthly_vs_headline_aov_diff = float(headline_row["aov_revenue_eligible"]) - monthly_aov_weighted
+    add_test(
+        "Monthly and headline AOV align under weighted definition",
+        "warning",
+        monthly_vs_headline_aov_diff,
+        abs(monthly_vs_headline_aov_diff) < 1e-6,
+        "absolute difference < 0.000001",
+        "Prevents averaging bias from unweighted monthly AOV rollups.",
     )
 
     cancellation_rate = _fetch_scalar(
@@ -126,7 +259,7 @@ def main() -> None:
         "SELECT AVG(CASE WHEN is_canceled_or_unavailable = 1 THEN 1.0 ELSE 0.0 END) FROM marts.fact_orders",
     )
     add_test(
-        "cancellation_rate_reasonable_band",
+        "Cancellation rate remains in expected operating band",
         "warning",
         cancellation_rate,
         0.0 <= cancellation_rate <= 0.2,
@@ -139,7 +272,7 @@ def main() -> None:
         "SELECT AVG(CASE WHEN is_on_time_delivery IS NULL THEN 0.0 ELSE 1.0 END) FROM marts.fact_orders",
     )
     add_test(
-        "on_time_metric_population_coverage",
+        "On-time KPI coverage remains healthy",
         "warning",
         on_time_coverage,
         on_time_coverage >= 0.90,
@@ -157,7 +290,7 @@ def main() -> None:
         """,
     )
     add_test(
-        "service_quality_signal_direction",
+        "Late deliveries depress review score (directional test)",
         "info",
         late_vs_ontime_gap,
         late_vs_ontime_gap > 0,
@@ -182,7 +315,7 @@ def main() -> None:
         """,
     )
     add_test(
-        "payment_to_gmv_ratio_sanity",
+        "Payment value to GMV ratio remains plausible",
         "warning",
         payment_gmv_ratio,
         0.90 <= payment_gmv_ratio <= 1.15,
