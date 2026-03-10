@@ -34,6 +34,9 @@ Author: **Allen Xu**
 | Payment Mix | Share of payment value by payment type | Payment Type | Indicates payment dependence and financing behavior. |
 | Delay Bucket Review Score | Avg review by delivery delay bucket | Delay Bucket | Quantifies CX impact of fulfillment delays. |
 | State Performance | Orders/GMV/review/delivery by customer state | State | Reveals regional operational variability. |
+| Weekly Ops Trend | Weekly trend of orders/GMV/service KPIs | Week | Supports operator cadence in weekly business reviews. |
+| Seller Operational Risk | Seller-level late/cancel/review profile | Seller | Helps prioritize seller quality interventions beyond pure revenue ranking. |
+| Cohort Retention Rate | Active customers in month N / cohort size | Cohort Month x Month Number | Tracks customer retention and repeat behavior over time. |
 
 ---
 

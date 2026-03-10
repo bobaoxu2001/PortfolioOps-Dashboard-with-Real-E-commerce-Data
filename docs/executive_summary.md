@@ -56,7 +56,7 @@ Additional observations:
    Trigger action when 4+ day late bucket exceeds threshold; this has clear review-score impact.
 
 3. **Harden metric governance**  
-   Require all executive reporting to use `fact_orders` and approved KPI definitions. Ban raw-table direct joins in production dashboards.
+   Require all executive reporting to use `fact_orders` and approved KPI definitions. Ban raw-table direct joins in production dashboards, and enforce publish-time data contract checks.
 
 4. **Improve retention and lifecycle insights**  
    Add repeat-purchase campaigns and track cohort repurchase given low repeat rate.

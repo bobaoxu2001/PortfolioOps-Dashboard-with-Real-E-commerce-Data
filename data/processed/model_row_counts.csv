@@ -1,4 +1,6 @@
 table_name,row_count
+kpi.customer_cohort_retention,225
+kpi.weekly_ops,101
 marts.dim_customers,99441
 marts.dim_dates,774
 marts.dim_products,32951

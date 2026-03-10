@@ -58,6 +58,10 @@ python3 python/download_olist_data.py
 
 ```text
 /
+├── .github/
+│   └── workflows/
+│       └── pipeline_smoke_test.yml
+├── Makefile
 ├── README.md
 ├── requirements.txt
 ├── data/
@@ -69,12 +73,18 @@ python3 python/download_olist_data.py
 │       ├── README.md
 │       ├── kpi_headline.csv
 │       ├── kpi_monthly.csv
+│       ├── kpi_weekly_ops.csv
+│       ├── kpi_active_customers_monthly.csv
+│       ├── kpi_customer_cohort_retention.csv
 │       ├── kpi_category_performance.csv
 │       ├── kpi_seller_performance.csv
+│       ├── kpi_seller_operational_risk.csv
 │       ├── kpi_state_performance.csv
 │       ├── kpi_payment_mix.csv
 │       ├── kpi_delay_vs_reviews.csv
 │       ├── data_quality_summary.csv
+│       ├── data_contract_test_results.csv
+│       ├── data_contract_test_summary.csv
 │       ├── kpi_join_risk_demo.csv
 │       └── model_row_counts.csv
 ├── sql/
@@ -85,6 +95,8 @@ python3 python/download_olist_data.py
 ├── python/
 │   ├── download_olist_data.py
 │   ├── build_reporting_layer.py
+│   ├── run_data_contract_tests.py
+│   ├── run_pipeline.py
 │   ├── generate_dashboard_assets.py
 │   ├── data_quality_audit.ipynb
 │   └── optional_etl_or_validation.ipynb
@@ -100,6 +112,8 @@ python3 python/download_olist_data.py
     ├── executive_summary.md
     ├── data_dictionary.md
     ├── metric_definitions.md
+    ├── qa_framework.md
+    ├── data_contract_test_report.md
     └── architecture_diagram.png
 ```
 
@@ -154,6 +168,23 @@ python3 python/download_olist_data.py
   - `is_canceled_or_unavailable`
   - `is_revenue_eligible_order`
   - `is_on_time_delivery`
+- Added automated data contract tests (9 checks) with publication-gating outputs.
+
+---
+
+## QA & Governance Automation
+
+The project includes an automated KPI governance layer:
+
+- **Script:** `python/run_data_contract_tests.py`
+- **Checks:** PK/FK integrity, GMV reconciliation, KPI sanity bands, and service-quality signal directionality
+- **Generated artifacts:**
+  - `data/processed/data_contract_test_results.csv`
+  - `data/processed/data_contract_test_summary.csv`
+  - `docs/data_contract_test_report.md`
+- **Governance rule:** critical failures block KPI publication
+
+CI smoke test is included in `.github/workflows/pipeline_smoke_test.yml`.
 
 ---
 
@@ -198,6 +229,7 @@ This separation prevents duplicated metrics and supports both high-level and dri
 - **CX impact of delays:** On-time orders average 4.29 review score vs 1.70 for 8+ days late.
 - **Payment concentration:** Credit card accounts for 78.3% of payment value.
 - **Retention opportunity:** repeat customer rate is ~3.1%.
+- **Operational monitoring upgrade:** weekly KPI trend + seller operational risk views + cohort retention outputs.
 
 ---
 
@@ -222,14 +254,28 @@ python3 python/download_olist_data.py
 # 3) Build staging + marts and export KPI tables
 python3 python/build_reporting_layer.py
 
-# 4) Generate dashboard screenshots, PDF, architecture diagram
+# 4) Run data contract tests
+python3 python/run_data_contract_tests.py
+
+# 5) Generate dashboard screenshots, PDF, architecture diagram
 python3 python/generate_dashboard_assets.py
+
+# One-command pipeline (download + build + QA + dashboard)
+python3 python/run_pipeline.py
+
+# Faster local rerun when raw data already exists
+python3 python/run_pipeline.py --skip-download
+
+# Makefile shortcuts
+make pipeline
+make pipeline-fast
 ```
 
 Optional exploration:
 - `python/data_quality_audit.ipynb`
 - `python/optional_etl_or_validation.ipynb`
 - `dashboard/powerbi_layout_guide.md` (visual-to-business-question mapping for Power BI build)
+- `docs/qa_framework.md` (consulting-style KPI governance framework)
 
 ---
 
@@ -237,8 +283,8 @@ Optional exploration:
 
 1. Rebuild visuals in native Power BI with drill-through and row-level filters.
 2. Add margin/profitability metrics if COGS and returns data is available.
-3. Add automated test suite for metric contracts and freshness checks.
-4. Add cohort retention dashboard and customer LTV view.
+3. Add freshness SLA monitoring and anomaly alert hooks.
+4. Add customer LTV/profitability analysis once contribution margin data is available.
 
 ---
 

@@ -18,6 +18,22 @@ GROUP BY 1
 ORDER BY 1;
 
 -- =========================================================
+-- Weekly KPI trend for operating cadence
+-- =========================================================
+SELECT
+    DATE_TRUNC('week', order_purchase_ts)::DATE AS week_start,
+    COUNT(*) AS total_orders,
+    SUM(COALESCE(item_gmv, 0)) AS total_gmv,
+    AVG(COALESCE(item_gmv, 0)) AS aov,
+    AVG(CASE WHEN is_canceled_or_unavailable = 1 THEN 1.0 ELSE 0.0 END) AS cancellation_rate,
+    AVG(avg_review_score) AS avg_review_score,
+    AVG(delivery_days) AS avg_delivery_days,
+    AVG(CASE WHEN is_on_time_delivery IS NULL THEN NULL ELSE is_on_time_delivery::DOUBLE END) AS on_time_delivery_rate
+FROM marts.fact_orders
+GROUP BY 1
+ORDER BY 1;
+
+-- =========================================================
 -- Category performance
 -- =========================================================
 SELECT
@@ -29,6 +45,35 @@ FROM marts.fact_order_items i
 LEFT JOIN marts.dim_products p
     ON i.product_id = p.product_id
 GROUP BY 1
+ORDER BY gmv DESC;
+
+-- =========================================================
+-- Seller operational risk profile (30+ orders)
+-- =========================================================
+WITH seller_orders AS (
+    SELECT
+        i.seller_id,
+        i.order_id,
+        SUM(i.gmv) AS order_gmv
+    FROM marts.fact_order_items i
+    GROUP BY 1, 2
+)
+SELECT
+    s.seller_id,
+    ds.seller_state,
+    COUNT(*) AS orders,
+    SUM(s.order_gmv) AS gmv,
+    AVG(s.order_gmv) AS avg_order_gmv,
+    AVG(CASE WHEN fo.is_on_time_delivery = 0 THEN 1.0 ELSE 0.0 END) AS late_delivery_rate,
+    AVG(CASE WHEN fo.is_canceled_or_unavailable = 1 THEN 1.0 ELSE 0.0 END) AS cancellation_rate,
+    AVG(fo.avg_review_score) AS avg_review_score
+FROM seller_orders s
+INNER JOIN marts.fact_orders fo
+    ON s.order_id = fo.order_id
+LEFT JOIN marts.dim_sellers ds
+    ON s.seller_id = ds.seller_id
+GROUP BY 1, 2
+HAVING COUNT(*) >= 30
 ORDER BY gmv DESC;
 
 -- =========================================================
@@ -45,6 +90,52 @@ LEFT JOIN marts.dim_sellers s
     ON sp.seller_id = s.seller_id
 GROUP BY 1, 2
 ORDER BY gmv DESC;
+
+-- =========================================================
+-- Cohort retention table
+-- =========================================================
+WITH first_orders AS (
+    SELECT
+        customer_unique_id,
+        DATE_TRUNC('month', MIN(order_purchase_ts))::DATE AS cohort_month
+    FROM marts.fact_orders
+    GROUP BY 1
+),
+customer_months AS (
+    SELECT DISTINCT
+        customer_unique_id,
+        DATE_TRUNC('month', order_purchase_ts)::DATE AS order_month
+    FROM marts.fact_orders
+),
+cohort_activity AS (
+    SELECT
+        f.cohort_month,
+        cm.order_month,
+        DATE_DIFF('month', f.cohort_month, cm.order_month) AS month_number,
+        COUNT(DISTINCT cm.customer_unique_id) AS active_customers
+    FROM customer_months cm
+    INNER JOIN first_orders f
+        ON cm.customer_unique_id = f.customer_unique_id
+    GROUP BY 1, 2, 3
+),
+cohort_sizes AS (
+    SELECT
+        cohort_month,
+        COUNT(DISTINCT customer_unique_id) AS cohort_size
+    FROM first_orders
+    GROUP BY 1
+)
+SELECT
+    ca.cohort_month,
+    ca.order_month,
+    ca.month_number,
+    cs.cohort_size,
+    ca.active_customers,
+    ca.active_customers::DOUBLE / NULLIF(cs.cohort_size, 0) AS retention_rate
+FROM cohort_activity ca
+INNER JOIN cohort_sizes cs
+    ON ca.cohort_month = cs.cohort_month
+ORDER BY ca.cohort_month, ca.month_number;
 
 -- =========================================================
 -- Delay bucket vs customer satisfaction
