@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import math
 import pathlib
+from typing import Any
 
 import duckdb
 import pandas as pd
 
 
-def _fetch_scalar(conn: duckdb.DuckDBPyConnection, query: str) -> float:
+def _fetch_scalar(conn: duckdb.DuckDBPyConnection, query: str) -> Any:
     return conn.execute(query).fetchone()[0]
 
 
@@ -19,8 +21,48 @@ def _load_single_row_csv(path: pathlib.Path) -> pd.Series:
     return df.iloc[0]
 
 
-def main() -> None:
-    repo_root = pathlib.Path(__file__).resolve().parents[1]
+def _as_finite_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        numeric_value = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(numeric_value):
+        return None
+    return numeric_value
+
+
+def _abs_less_than(value: Any, threshold: float) -> bool:
+    numeric_value = _as_finite_float(value)
+    return numeric_value is not None and abs(numeric_value) < threshold
+
+
+def _greater_than(value: Any, threshold: float) -> bool:
+    numeric_value = _as_finite_float(value)
+    return numeric_value is not None and numeric_value > threshold
+
+
+def _greater_equal(value: Any, threshold: float) -> bool:
+    numeric_value = _as_finite_float(value)
+    return numeric_value is not None and numeric_value >= threshold
+
+
+def _between(value: Any, lower: float, upper: float) -> bool:
+    numeric_value = _as_finite_float(value)
+    return numeric_value is not None and lower <= numeric_value <= upper
+
+
+def _format_observed_value(value: Any) -> str:
+    numeric_value = _as_finite_float(value)
+    if numeric_value is None:
+        return "NULL"
+    return f"{numeric_value:.6f}"
+
+
+def main(repo_root: pathlib.Path | None = None) -> None:
+    if repo_root is None:
+        repo_root = pathlib.Path(__file__).resolve().parents[1]
     processed_dir = repo_root / "data" / "processed"
     processed_dir.mkdir(parents=True, exist_ok=True)
 
@@ -30,7 +72,7 @@ def main() -> None:
 
     tests = []
 
-    def add_test(name: str, severity: str, value: float, passed: bool, threshold: str, rationale: str) -> None:
+    def add_test(name: str, severity: str, value: Any, passed: bool, threshold: str, rationale: str) -> None:
         tests.append(
             {
                 "test_name": name,
@@ -121,7 +163,7 @@ def main() -> None:
         "All-orders GMV reconciles between item and order facts",
         "critical",
         gmv_diff_all_orders,
-        abs(gmv_diff_all_orders) < 0.01,
+        _abs_less_than(gmv_diff_all_orders, 0.01),
         "absolute difference < 0.01",
         "Order-level GMV must reconcile to item-level GMV.",
     )
@@ -149,7 +191,7 @@ def main() -> None:
         "Revenue-eligible GMV reconciles across grains",
         "critical",
         gmv_diff_revenue_eligible,
-        abs(gmv_diff_revenue_eligible) < 0.01,
+        _abs_less_than(gmv_diff_revenue_eligible, 0.01),
         "absolute difference < 0.01",
         "Primary revenue KPI must match whether computed from items or orders.",
     )
@@ -162,7 +204,7 @@ def main() -> None:
         "Revenue-eligible order count is non-zero",
         "critical",
         revenue_eligible_order_count,
-        revenue_eligible_order_count > 0,
+        _greater_than(revenue_eligible_order_count, 0),
         "> 0",
         "Primary revenue KPIs cannot be published with zero qualifying orders.",
     )
@@ -170,7 +212,7 @@ def main() -> None:
     cancellation_exclusion_leakage = _fetch_scalar(
         conn,
         """
-        SELECT SUM(COALESCE(revenue_eligible_gmv, 0))
+        SELECT COALESCE(SUM(COALESCE(revenue_eligible_gmv, 0)), 0)
         FROM marts.fact_orders
         WHERE order_status IN ('canceled', 'unavailable')
         """,
@@ -179,7 +221,7 @@ def main() -> None:
         "Primary revenue excludes canceled and unavailable orders",
         "critical",
         cancellation_exclusion_leakage,
-        abs(cancellation_exclusion_leakage) < 0.01,
+        _abs_less_than(cancellation_exclusion_leakage, 0.01),
         "absolute value < 0.01",
         "Canceled/unavailable orders are operational outcomes and should not inflate commercial KPIs.",
     )
@@ -197,7 +239,7 @@ def main() -> None:
         "Delivered orders have expected on-time logic coverage",
         "warning",
         delivered_logic_coverage,
-        delivered_logic_coverage >= 0.995,
+        _greater_equal(delivered_logic_coverage, 0.995),
         ">= 0.995",
         "Delivered orders should almost always have enough timestamp data for on-time classification.",
     )
@@ -213,7 +255,7 @@ def main() -> None:
         "Headline AOV matches defined formula",
         "critical",
         headline_aov_diff,
-        abs(headline_aov_diff) < 1e-6,
+        _abs_less_than(headline_aov_diff, 1e-6),
         "absolute difference < 0.000001",
         "AOV must equal revenue-eligible GMV divided by revenue-eligible order count.",
     )
@@ -224,7 +266,7 @@ def main() -> None:
         "Monthly primary GMV reconciles to headline primary GMV",
         "critical",
         monthly_gmv_diff,
-        abs(monthly_gmv_diff) < 0.01,
+        _abs_less_than(monthly_gmv_diff, 0.01),
         "absolute difference < 0.01",
         "Roll-up checks prevent hidden leakage between monthly reporting and headline KPIs.",
     )
@@ -234,7 +276,7 @@ def main() -> None:
         "Monthly revenue-eligible order count reconciles to headline",
         "critical",
         monthly_order_diff,
-        abs(monthly_order_diff) < 0.01,
+        _abs_less_than(monthly_order_diff, 0.01),
         "absolute difference < 0.01",
         "Primary order volume denominator should align across all executive summary layers.",
     )
@@ -249,7 +291,7 @@ def main() -> None:
         "Monthly and headline AOV align under weighted definition",
         "warning",
         monthly_vs_headline_aov_diff,
-        abs(monthly_vs_headline_aov_diff) < 1e-6,
+        _abs_less_than(monthly_vs_headline_aov_diff, 1e-6),
         "absolute difference < 0.000001",
         "Prevents averaging bias from unweighted monthly AOV rollups.",
     )
@@ -262,7 +304,7 @@ def main() -> None:
         "Cancellation rate remains in expected operating band",
         "warning",
         cancellation_rate,
-        0.0 <= cancellation_rate <= 0.2,
+        _between(cancellation_rate, 0.0, 0.2),
         "between 0 and 0.20",
         "A broad sanity check to catch severe status-mapping regressions.",
     )
@@ -275,7 +317,7 @@ def main() -> None:
         "On-time KPI coverage remains healthy",
         "warning",
         on_time_coverage,
-        on_time_coverage >= 0.90,
+        _greater_equal(on_time_coverage, 0.90),
         ">= 0.90",
         "Most orders should be evaluable for on-time delivery after model logic.",
     )
@@ -293,7 +335,7 @@ def main() -> None:
         "Late deliveries depress review score (directional test)",
         "info",
         late_vs_ontime_gap,
-        late_vs_ontime_gap > 0,
+        _greater_than(late_vs_ontime_gap, 0),
         "> 0",
         "On-time deliveries should show higher review scores than late deliveries.",
     )
@@ -318,7 +360,7 @@ def main() -> None:
         "Payment value to GMV ratio remains plausible",
         "warning",
         payment_gmv_ratio,
-        0.90 <= payment_gmv_ratio <= 1.15,
+        _between(payment_gmv_ratio, 0.90, 1.15),
         "between 0.90 and 1.15",
         "Detects major revenue/payment mismatches after transformations.",
     )
@@ -361,7 +403,7 @@ def main() -> None:
                     str(row["test_name"]),
                     str(row["severity"]),
                     str(row["status"]),
-                    f"{float(row['observed_value']):.6f}",
+                    _format_observed_value(row["observed_value"]),
                     str(row["threshold"]),
                     str(row["rationale"]),
                 ]
