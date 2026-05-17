@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import pathlib
 
 import duckdb
@@ -10,6 +11,49 @@ import pandas as pd
 
 def _fetch_scalar(conn: duckdb.DuckDBPyConnection, query: str) -> float:
     return conn.execute(query).fetchone()[0]
+
+
+def _is_missing(value: object) -> bool:
+    if value is None:
+        return True
+    try:
+        return bool(pd.isna(value))
+    except (TypeError, ValueError):
+        return False
+
+
+def _is_finite_number(value: object) -> bool:
+    if _is_missing(value):
+        return False
+    try:
+        numeric_value = float(value)
+    except (TypeError, ValueError):
+        return False
+    return math.isfinite(numeric_value)
+
+
+def _safe_abs_less_than(value: object, threshold: float) -> bool:
+    return _is_finite_number(value) and abs(float(value)) < threshold
+
+
+def _safe_between(value: object, lower_bound: float, upper_bound: float) -> bool:
+    return _is_finite_number(value) and lower_bound <= float(value) <= upper_bound
+
+
+def _safe_greater_than(value: object, threshold: float) -> bool:
+    return _is_finite_number(value) and float(value) > threshold
+
+
+def _safe_greater_than_or_equal(value: object, threshold: float) -> bool:
+    return _is_finite_number(value) and float(value) >= threshold
+
+
+def _format_observed_value(value: object) -> str:
+    if _is_missing(value):
+        return "NULL"
+    if _is_finite_number(value):
+        return f"{float(value):.6f}"
+    return str(value)
 
 
 def _load_single_row_csv(path: pathlib.Path) -> pd.Series:
@@ -121,7 +165,7 @@ def main() -> None:
         "All-orders GMV reconciles between item and order facts",
         "critical",
         gmv_diff_all_orders,
-        abs(gmv_diff_all_orders) < 0.01,
+        _safe_abs_less_than(gmv_diff_all_orders, 0.01),
         "absolute difference < 0.01",
         "Order-level GMV must reconcile to item-level GMV.",
     )
@@ -149,7 +193,7 @@ def main() -> None:
         "Revenue-eligible GMV reconciles across grains",
         "critical",
         gmv_diff_revenue_eligible,
-        abs(gmv_diff_revenue_eligible) < 0.01,
+        _safe_abs_less_than(gmv_diff_revenue_eligible, 0.01),
         "absolute difference < 0.01",
         "Primary revenue KPI must match whether computed from items or orders.",
     )
@@ -170,7 +214,7 @@ def main() -> None:
     cancellation_exclusion_leakage = _fetch_scalar(
         conn,
         """
-        SELECT SUM(COALESCE(revenue_eligible_gmv, 0))
+        SELECT COALESCE(SUM(COALESCE(revenue_eligible_gmv, 0)), 0)
         FROM marts.fact_orders
         WHERE order_status IN ('canceled', 'unavailable')
         """,
@@ -179,7 +223,7 @@ def main() -> None:
         "Primary revenue excludes canceled and unavailable orders",
         "critical",
         cancellation_exclusion_leakage,
-        abs(cancellation_exclusion_leakage) < 0.01,
+        _safe_abs_less_than(cancellation_exclusion_leakage, 0.01),
         "absolute value < 0.01",
         "Canceled/unavailable orders are operational outcomes and should not inflate commercial KPIs.",
     )
@@ -197,7 +241,7 @@ def main() -> None:
         "Delivered orders have expected on-time logic coverage",
         "warning",
         delivered_logic_coverage,
-        delivered_logic_coverage >= 0.995,
+        _safe_greater_than_or_equal(delivered_logic_coverage, 0.995),
         ">= 0.995",
         "Delivered orders should almost always have enough timestamp data for on-time classification.",
     )
@@ -213,7 +257,7 @@ def main() -> None:
         "Headline AOV matches defined formula",
         "critical",
         headline_aov_diff,
-        abs(headline_aov_diff) < 1e-6,
+        _safe_abs_less_than(headline_aov_diff, 1e-6),
         "absolute difference < 0.000001",
         "AOV must equal revenue-eligible GMV divided by revenue-eligible order count.",
     )
@@ -224,7 +268,7 @@ def main() -> None:
         "Monthly primary GMV reconciles to headline primary GMV",
         "critical",
         monthly_gmv_diff,
-        abs(monthly_gmv_diff) < 0.01,
+        _safe_abs_less_than(monthly_gmv_diff, 0.01),
         "absolute difference < 0.01",
         "Roll-up checks prevent hidden leakage between monthly reporting and headline KPIs.",
     )
@@ -234,7 +278,7 @@ def main() -> None:
         "Monthly revenue-eligible order count reconciles to headline",
         "critical",
         monthly_order_diff,
-        abs(monthly_order_diff) < 0.01,
+        _safe_abs_less_than(monthly_order_diff, 0.01),
         "absolute difference < 0.01",
         "Primary order volume denominator should align across all executive summary layers.",
     )
@@ -249,7 +293,7 @@ def main() -> None:
         "Monthly and headline AOV align under weighted definition",
         "warning",
         monthly_vs_headline_aov_diff,
-        abs(monthly_vs_headline_aov_diff) < 1e-6,
+        _safe_abs_less_than(monthly_vs_headline_aov_diff, 1e-6),
         "absolute difference < 0.000001",
         "Prevents averaging bias from unweighted monthly AOV rollups.",
     )
@@ -262,7 +306,7 @@ def main() -> None:
         "Cancellation rate remains in expected operating band",
         "warning",
         cancellation_rate,
-        0.0 <= cancellation_rate <= 0.2,
+        _safe_between(cancellation_rate, 0.0, 0.2),
         "between 0 and 0.20",
         "A broad sanity check to catch severe status-mapping regressions.",
     )
@@ -275,7 +319,7 @@ def main() -> None:
         "On-time KPI coverage remains healthy",
         "warning",
         on_time_coverage,
-        on_time_coverage >= 0.90,
+        _safe_greater_than_or_equal(on_time_coverage, 0.90),
         ">= 0.90",
         "Most orders should be evaluable for on-time delivery after model logic.",
     )
@@ -293,7 +337,7 @@ def main() -> None:
         "Late deliveries depress review score (directional test)",
         "info",
         late_vs_ontime_gap,
-        late_vs_ontime_gap > 0,
+        _safe_greater_than(late_vs_ontime_gap, 0),
         "> 0",
         "On-time deliveries should show higher review scores than late deliveries.",
     )
@@ -318,7 +362,7 @@ def main() -> None:
         "Payment value to GMV ratio remains plausible",
         "warning",
         payment_gmv_ratio,
-        0.90 <= payment_gmv_ratio <= 1.15,
+        _safe_between(payment_gmv_ratio, 0.90, 1.15),
         "between 0.90 and 1.15",
         "Detects major revenue/payment mismatches after transformations.",
     )
@@ -361,7 +405,7 @@ def main() -> None:
                     str(row["test_name"]),
                     str(row["severity"]),
                     str(row["status"]),
-                    f"{float(row['observed_value']):.6f}",
+                    _format_observed_value(row["observed_value"]),
                     str(row["threshold"]),
                     str(row["rationale"]),
                 ]
