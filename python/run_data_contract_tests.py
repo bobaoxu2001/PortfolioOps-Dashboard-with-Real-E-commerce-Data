@@ -19,8 +19,7 @@ def _load_single_row_csv(path: pathlib.Path) -> pd.Series:
     return df.iloc[0]
 
 
-def main() -> None:
-    repo_root = pathlib.Path(__file__).resolve().parents[1]
+def run_contract_tests(repo_root: pathlib.Path) -> None:
     processed_dir = repo_root / "data" / "processed"
     processed_dir.mkdir(parents=True, exist_ok=True)
 
@@ -170,7 +169,7 @@ def main() -> None:
     cancellation_exclusion_leakage = _fetch_scalar(
         conn,
         """
-        SELECT SUM(COALESCE(revenue_eligible_gmv, 0))
+        SELECT COALESCE(SUM(COALESCE(revenue_eligible_gmv, 0)), 0)
         FROM marts.fact_orders
         WHERE order_status IN ('canceled', 'unavailable')
         """,
@@ -383,6 +382,10 @@ def main() -> None:
 
     if summary["critical_failed"] > 0:
         raise SystemExit("Critical data contract tests failed.")
+
+
+def main() -> None:
+    run_contract_tests(pathlib.Path(__file__).resolve().parents[1])
 
 
 if __name__ == "__main__":
