@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import csv
 import pathlib
+import sys
 import tempfile
 import unittest
 
 import duckdb
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 import run_data_contract_tests
 
