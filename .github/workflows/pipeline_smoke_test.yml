@@ -24,6 +24,9 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
 
+      - name: Run regression tests
+        run: python -m unittest discover -s python -p "test_*.py"
+
       - name: Download Olist public data
         run: python python/download_olist_data.py
 

@@ -9,7 +9,10 @@ import pandas as pd
 
 
 def _fetch_scalar(conn: duckdb.DuckDBPyConnection, query: str) -> float:
-    return conn.execute(query).fetchone()[0]
+    value = conn.execute(query).fetchone()[0]
+    if value is None:
+        return 0.0
+    return float(value)
 
 
 def _load_single_row_csv(path: pathlib.Path) -> pd.Series:
@@ -19,8 +22,9 @@ def _load_single_row_csv(path: pathlib.Path) -> pd.Series:
     return df.iloc[0]
 
 
-def main() -> None:
-    repo_root = pathlib.Path(__file__).resolve().parents[1]
+def main(repo_root: pathlib.Path | None = None) -> None:
+    if repo_root is None:
+        repo_root = pathlib.Path(__file__).resolve().parents[1]
     processed_dir = repo_root / "data" / "processed"
     processed_dir.mkdir(parents=True, exist_ok=True)
 
