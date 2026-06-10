@@ -26,44 +26,63 @@ class RunDataContractTestsTest(unittest.TestCase):
             conn.execute(
                 """
                 CREATE TABLE marts.fact_orders AS
-                SELECT
-                    'order_1'::VARCHAR AS order_id,
-                    'customer_1'::VARCHAR AS customer_id,
-                    'delivered'::VARCHAR AS order_status,
-                    100.0::DOUBLE AS item_gmv,
-                    100.0::DOUBLE AS revenue_eligible_gmv,
-                    1::INTEGER AS is_revenue_eligible_order,
-                    0::INTEGER AS is_canceled_or_unavailable,
-                    1::INTEGER AS is_on_time_delivery,
-                    5.0::DOUBLE AS avg_review_score,
-                    105.0::DOUBLE AS payment_value_total
+                SELECT *
+                FROM (
+                    VALUES
+                        (
+                            'order_1', 'customer_1', 'delivered', 100.0, 100.0,
+                            1, 0, 1, 5.0, 105.0
+                        ),
+                        (
+                            'order_2', 'customer_2', 'delivered', 50.0, 50.0,
+                            1, 0, 0, 3.0, 52.5
+                        )
+                ) AS t(
+                    order_id,
+                    customer_id,
+                    order_status,
+                    item_gmv,
+                    revenue_eligible_gmv,
+                    is_revenue_eligible_order,
+                    is_canceled_or_unavailable,
+                    is_on_time_delivery,
+                    avg_review_score,
+                    payment_value_total
+                )
                 """
             )
             conn.execute(
                 """
                 CREATE TABLE marts.fact_order_items AS
-                SELECT
-                    'order_1'::VARCHAR AS order_id,
-                    1::INTEGER AS order_item_id,
-                    'product_1'::VARCHAR AS product_id,
-                    100.0::DOUBLE AS gmv
+                SELECT *
+                FROM (
+                    VALUES
+                        ('order_1', 1, 'product_1', 100.0),
+                        ('order_2', 1, 'product_1', 50.0)
+                ) AS t(order_id, order_item_id, product_id, gmv)
                 """
             )
-            conn.execute("CREATE TABLE marts.dim_customers AS SELECT 'customer_1'::VARCHAR AS customer_id")
+            conn.execute(
+                """
+                CREATE TABLE marts.dim_customers AS
+                SELECT *
+                FROM (VALUES ('customer_1'), ('customer_2')) AS t(customer_id)
+                """
+            )
             conn.execute("CREATE TABLE marts.dim_products AS SELECT 'product_1'::VARCHAR AS product_id")
             conn.close()
 
             pd.DataFrame(
                 [
                     {
-                        "gmv_revenue_eligible": 100.0,
-                        "revenue_eligible_orders": 1,
-                        "aov_revenue_eligible": 100.0,
+                        "gmv_revenue_eligible": 150.0,
+                        "revenue_eligible_orders": 2,
+                        "aov_revenue_eligible": 75.0,
                     }
                 ]
             ).to_csv(processed_dir / "kpi_headline.csv", index=False)
             pd.DataFrame(
-                [{"gmv_revenue_eligible": 100.0, "revenue_eligible_orders": 1}]
+                [{"gmv_revenue_eligible": 150.0, "revenue_eligible_orders": 2}]
             ).to_csv(processed_dir / "kpi_monthly.csv", index=False)
 
             main(repo_root)
