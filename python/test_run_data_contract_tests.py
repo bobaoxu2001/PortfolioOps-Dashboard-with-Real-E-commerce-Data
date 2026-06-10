@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 import duckdb
 import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from run_data_contract_tests import main
 
